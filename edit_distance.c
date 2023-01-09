@@ -48,14 +48,6 @@ int serial_levenshtein(char *s1, char *s2) {
           MIN(matrix[x - 1][y] + 1, matrix[x][y - 1] + 1,
               matrix[x - 1][y - 1] + (s1[y - 1] == s2[x - 1] ? 0 : 1));
 
-  printf("\n");
-  for (i = 0; i <= s2len; i++) {
-
-    for (j = 0; j <= s1len; j++) {
-      printf("%i ", matrix[i][j]);
-    }
-    printf("\n");
-  }
   unsigned int return_val = matrix[s2len][s1len];
   deallocate_matrix(matrix, s2len + 1);
   return return_val;
@@ -126,35 +118,6 @@ int parallel_diagonal_levenshtein(char *s1, char *s2) {
   return return_val;
 }
 
-// function to return the number of unique
-// characters in str[]
-int count_unique_char(char *str, char *alphabet) {
-
-  int hash[128] = {0};
-  int i, c = 0, j = 0;
-
-  // reading each character of str[]
-  for (i = 0; i < strlen(str); ++i) {
-    // set the position corresponding
-    // to the ASCII value of str[i] in hash[] to 1
-    hash[str[i]] = 1;
-  }
-
-  // counting number of unique characters
-  // repeated elements are only counted once
-  for (i = 0; i < 128; ++i) {
-    c += hash[i];
-  }
-  alphabet = malloc(sizeof(char) * c);
-  for (i = 0; i < 128; ++i) {
-    if (hash[i] == 1) {
-      alphabet[j] = i;
-      ++j;
-    }
-  }
-  alphabet[j] = '\0';
-  return c;
-}
 
 int index_of_letter(char letter, char *alphabet) {
   int i;
@@ -186,7 +149,7 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   for (i = 0; i < 128; ++i) {
     u += hash[i];
   }
-  alphabet = malloc(sizeof(char) * (u + 1));
+  alphabet = malloc(sizeof(int) * (u + 1));
 
   for (i = 0; i < 128; ++i) {
     if (hash[i] == 1) {
@@ -196,58 +159,51 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   }
   alphabet[j] = '\0';
 
-  unsigned int **mi = malloc((u) * sizeof(unsigned int *));
+  unsigned int **mi = malloc((u + 1) * sizeof(unsigned int *));
   for (i = 0; i < u; i++)
-    mi[i] = malloc((s1len) * sizeof(unsigned int));
+    mi[i] = malloc((s1len + 1) * sizeof(unsigned int));
 
   for (i = 0; i < u; i++) {
-    for (j = 0; j < s1len; j++) {
+    for (j = 0; j < s2len; j++) {
       if (j == 0) {
-        mi[i][j] = (s1[j] == alphabet[i]) ? 0 : -1;
-      } else if (s1[j] == alphabet[i]) {
+        mi[i][j] = (s2[j] == alphabet[i]) ? 0 : -1;
+      } else if (s2[j] == alphabet[i]) {
         mi[i][j] = j;
       } else {
         mi[i][j] = mi[i][j - 1];
       }
-      // printf("%i ", mi[i][j]);
     }
-    // printf("\n");
   }
-
-  unsigned int **matrix = malloc((s2len + 1) * sizeof(unsigned int *));
-  for (i = 0; i < s2len + 1; i++)
-    matrix[i] = malloc((s1len + 1) * sizeof(unsigned int));
-  for (i = 0; i <= s2len; i++) {
-    for (j = 0; j <= s1len; j++) {
-      int a = i > 0 ? index_of_letter(s2[i - 1], alphabet) : 0;
-      lmi = mi[a][j];
-      // printf("%i %i %i \n", a, j, mi[a][j]);
-      if (j == 0) {
-        matrix[i][j] = i;
-      } else if (i == 0) {
-        matrix[i][j] = j;
-      } else if (j == lmi) {
+  unsigned int **matrix = malloc((s1len + 1) * sizeof(unsigned int *));
+  for (i = 0; i < s1len + 1; i++)
+    matrix[i] = malloc((s2len + 1) * sizeof(unsigned int));
+  for(j = 0; j < s2len + 1; j++) {
+      matrix[0][j] = j;
+  }
+  for(i = 0; i <= s1len; i++) {
+    matrix[i][0]= i;
+  }
+  for (i = 1; i <= s1len; i++) {
+    int a = index_of_letter(s1[i - 1], alphabet);
+    for (j = 1; j <= s2len; j++) {
+      lmi = mi[a][j-1] + 1;
+      if (j == lmi) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else if ((lmi == -1) || (lmi == 0)) {
         matrix[i][j] =
-            MIN(matrix[i - 1][j - 1] + +((s1[j - 1] == s2[i - 1]) ? 0 : 1),
+            MIN(matrix[i - 1][j - 1] +1,
                 matrix[i - 1][j] + 1);
       } else if (j > lmi) {
         matrix[i][j] = MIN(matrix[i - 1][j - 1] + 1, matrix[i - 1][j] + 1,
-                           matrix[i - 1][lmi - 1] + (j - lmi));
+                           matrix[i - 1][lmi - 1] + (j - lmi) );
       }
     }
   }
-  printf("\n");
-  for (i = 0; i <= s2len; i++) {
-
-    for (j = 0; j <= s1len; j++) {
-      printf("%i ", matrix[i][j]);
-    }
-    printf("\n");
-  }
-  unsigned int return_val = matrix[s2len][s1len];
-  deallocate_matrix(matrix, s2len + 1);
+  free(alphabet);
+  unsigned int return_val = matrix[s1len][s2len];
+  
+  // deallocate_matrix(mi, u + 1);
+  // deallocate_matrix(matrix, s1len +1);
   return return_val;
 }
 
@@ -263,7 +219,7 @@ void benchmark(char *s1, char *s2, int (*f)(char *, char *)) {
 }
 
 int main(int argc, char **argv) {
-  FILE *in = fopen("input2.txt", "r");
+  FILE *in = fopen("input.txt", "r");
   int len1 = atoi(argv[1]);
   int len2 = atoi(argv[2]);
   char s1[len1];
@@ -271,9 +227,9 @@ int main(int argc, char **argv) {
   fscanf(in, "%s %s", s1, s2);
   fclose(in);
   benchmark(s1, s2, serial_levenshtein);
-  // benchmark(s1, s2, diagonal_levenshtein);
-  // benchmark(s1, s2, parallel_diagonal_levenshtein);
-  benchmark(s1, s2, parallel_friendly_algorithm);
+  benchmark(s1, s2, diagonal_levenshtein);
+  benchmark(s1, s2, parallel_diagonal_levenshtein);
+  benchmark(s2, s1, parallel_friendly_algorithm);
 
   return 0;
 }
