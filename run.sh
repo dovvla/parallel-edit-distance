@@ -1,3 +1,4 @@
 #!/bin/sh
+./test_generator.py $1 $2 abc
 gcc -fopenmp -std=c99 edit_distance.c -o ed
-./ed 20 20
+./ed $1 $2
