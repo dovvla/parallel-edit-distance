@@ -100,7 +100,7 @@ int parallel_diagonal_levenshtein(char *s1, char *s2) {
   for (i_x = 2; i_x <= s1len + s2len; i_x++) {
 #pragma omp parallel for firstprivate(i_x, x, y) shared(matrix)                \
                                                                                \
-    num_threads(16)
+    num_threads(4)
     for (i_y = i_x - 1; i_y >= 1; i_y--) {
       y = i_x - i_y;
       x = i_y;
@@ -117,7 +117,6 @@ int parallel_diagonal_levenshtein(char *s1, char *s2) {
   deallocate_matrix(matrix, s2len + 1);
   return return_val;
 }
-
 
 int index_of_letter(char letter, char *alphabet) {
   int i;
@@ -149,7 +148,7 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   for (i = 0; i < 128; ++i) {
     u += hash[i];
   }
-  alphabet = malloc(sizeof(int) * (u + 1));
+  alphabet = malloc(sizeof(int) * (u + 2));
 
   for (i = 0; i < 128; ++i) {
     if (hash[i] == 1) {
@@ -160,8 +159,8 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   alphabet[j] = '\0';
 
   unsigned int **mi = malloc((u + 1) * sizeof(unsigned int *));
-  for (i = 0; i < u; i++)
-    mi[i] = malloc((s1len + 1) * sizeof(unsigned int));
+  for (i = 0; i < u + 1; i++)
+    mi[i] = malloc((s2len + 1) * sizeof(unsigned int));
 
   for (i = 0; i < u; i++) {
     for (j = 0; j < s2len; j++) {
@@ -177,33 +176,110 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   unsigned int **matrix = malloc((s1len + 1) * sizeof(unsigned int *));
   for (i = 0; i < s1len + 1; i++)
     matrix[i] = malloc((s2len + 1) * sizeof(unsigned int));
-  for(j = 0; j < s2len + 1; j++) {
-      matrix[0][j] = j;
+  for (j = 0; j < s2len + 1; j++) {
+    matrix[0][j] = j;
   }
-  for(i = 0; i <= s1len; i++) {
-    matrix[i][0]= i;
+  for (i = 0; i <= s1len; i++) {
+    matrix[i][0] = i;
   }
   for (i = 1; i <= s1len; i++) {
     int a = index_of_letter(s1[i - 1], alphabet);
     for (j = 1; j <= s2len; j++) {
-      lmi = mi[a][j-1] + 1;
+      lmi = mi[a][j - 1] + 1;
       if (j == lmi) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else if ((lmi == -1) || (lmi == 0)) {
-        matrix[i][j] =
-            MIN(matrix[i - 1][j - 1] +1,
-                matrix[i - 1][j] + 1);
+        matrix[i][j] = MIN(matrix[i - 1][j - 1] + 1, matrix[i - 1][j] + 1);
       } else if (j > lmi) {
         matrix[i][j] = MIN(matrix[i - 1][j - 1] + 1, matrix[i - 1][j] + 1,
-                           matrix[i - 1][lmi - 1] + (j - lmi) );
+                           matrix[i - 1][lmi - 1] + (j - lmi));
       }
     }
   }
   free(alphabet);
   unsigned int return_val = matrix[s1len][s2len];
-  
-  // deallocate_matrix(mi, u + 1);
-  // deallocate_matrix(matrix, s1len +1);
+
+  deallocate_matrix(mi, u + 1);
+  deallocate_matrix(matrix, s1len + 1);
+  return return_val;
+}
+
+int parallelised_friendly_algorithm(char *s1, char *s2) {
+  unsigned int i, j = 0, x, y, s1len, s2len, u = 0, lmi;
+  char *alphabet;
+  s1len = strlen(s1);
+  s2len = strlen(s2);
+  int hash[128] = {0};
+
+  // reading each character of str[]
+  for (i = 0; i < strlen(s1); ++i) {
+    // set the position corresponding
+    // to the ASCII value of str[i] in hash[] to 1
+    hash[s1[i]] = 1;
+  }
+
+  // counting number of unique characters
+  // repeated elements are only counted once
+  for (i = 0; i < 128; ++i) {
+    u += hash[i];
+  }
+  alphabet = malloc(sizeof(int) * (u + 2));
+
+  for (i = 0; i < 128; ++i) {
+    if (hash[i] == 1) {
+      alphabet[j] = i;
+      ++j;
+    }
+  }
+  alphabet[j] = '\0';
+
+  unsigned int **mi = malloc((u + 1) * sizeof(unsigned int *));
+  for (i = 0; i < u + 1; i++)
+    mi[i] = malloc((s2len + 1) * sizeof(unsigned int));
+
+#pragma omp parallel for private(j) shared(s2len, mi, s2, alphabet)
+  for (i = 0; i < u; i++) {
+    for (j = 0; j < s2len; j++) {
+      if (j == 0) {
+        mi[i][j] = (s2[j] == alphabet[i]) ? 0 : -1;
+      } else if (s2[j] == alphabet[i]) {
+        mi[i][j] = j;
+      } else {
+        mi[i][j] = mi[i][j - 1];
+      }
+    }
+  }
+  unsigned int **matrix = malloc((s1len + 1) * sizeof(unsigned int *));
+  for (i = 0; i < s1len + 1; i++)
+    matrix[i] = malloc((s2len + 1) * sizeof(unsigned int));
+#pragma omp parallel for
+  for (j = 0; j < s2len + 1; j++) {
+    matrix[0][j] = j;
+  }
+#pragma omp parallel for
+  for (i = 0; i <= s1len; i++) {
+    matrix[i][0] = i;
+  }
+  for (i = 1; i <= s1len; i++) {
+    int a = index_of_letter(s1[i - 1], alphabet);
+#pragma omp parallel for shared(i, s2len, mi) private(lmi)
+    for (j = 1; j <= s2len; j++) {
+      lmi = mi[a][j - 1] + 1;
+      if (j == lmi) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else if ((lmi == -1) || (lmi == 0)) {
+        matrix[i][j] = MIN(matrix[i - 1][j - 1] + 1, matrix[i - 1][j] + 1);
+      } else if (j > lmi) {
+        matrix[i][j] = MIN(matrix[i - 1][j - 1] + 1, matrix[i - 1][j] + 1,
+                           matrix[i - 1][lmi - 1] + (j - lmi));
+      }
+    }
+  }
+  free(alphabet);
+  unsigned int return_val = matrix[s1len][s2len];
+
+  deallocate_matrix(mi, u + 1);
+  deallocate_matrix(matrix, s1len + 1);
   return return_val;
 }
 
@@ -229,7 +305,8 @@ int main(int argc, char **argv) {
   benchmark(s1, s2, serial_levenshtein);
   benchmark(s1, s2, diagonal_levenshtein);
   benchmark(s1, s2, parallel_diagonal_levenshtein);
-  benchmark(s2, s1, parallel_friendly_algorithm);
+  benchmark(s1, s2, parallel_friendly_algorithm);
+  benchmark(s1, s2, parallelised_friendly_algorithm);
 
   return 0;
 }
