@@ -28,7 +28,7 @@ void deallocate_matrix(unsigned int **matrix, unsigned int rows) {
   free(matrix);
 }
 
-int serial_levenshtein(char *s1, char *s2) {
+int serial_levenshtein(char *s1, char *s2, int NUM_THREADS) {
   unsigned int i, x, y, s1len, s2len, j;
   s1len = strlen(s1);
   s2len = strlen(s2);
@@ -53,7 +53,7 @@ int serial_levenshtein(char *s1, char *s2) {
   return return_val;
 }
 
-int diagonal_levenshtein(char *s1, char *s2) {
+int diagonal_levenshtein(char *s1, char *s2, int NUM_THREADS) {
   unsigned int i, x, y, s1len, s2len, i_x, i_y, start, stop;
   s1len = strlen(s1);
   s2len = strlen(s2);
@@ -83,7 +83,7 @@ int diagonal_levenshtein(char *s1, char *s2) {
   return return_val;
 }
 
-int parallel_diagonal_levenshtein(char *s1, char *s2) {
+int parallel_diagonal_levenshtein(char *s1, char *s2, int NUM_THREADS) {
   unsigned int i, x, y, s1len, s2len, i_x, i_y;
   s1len = strlen(s1);
   s2len = strlen(s2);
@@ -100,7 +100,7 @@ int parallel_diagonal_levenshtein(char *s1, char *s2) {
   for (i_x = 2; i_x <= s1len + s2len; i_x++) {
 #pragma omp parallel for firstprivate(i_x, x, y) shared(matrix)                \
                                                                                \
-    num_threads(4)
+    num_threads(NUM_THREADS)
     for (i_y = i_x - 1; i_y >= 1; i_y--) {
       y = i_x - i_y;
       x = i_y;
@@ -129,7 +129,7 @@ int index_of_letter(char letter, char *alphabet) {
   return -1;
 }
 
-int parallel_friendly_algorithm(char *s1, char *s2) {
+int parallel_friendly_algorithm(char *s1, char *s2, int NUM_THREADS) {
   unsigned int i, j = 0, x, y, s1len, s2len, u = 0, lmi;
   char *alphabet;
   s1len = strlen(s1);
@@ -204,7 +204,7 @@ int parallel_friendly_algorithm(char *s1, char *s2) {
   return return_val;
 }
 
-int parallelised_friendly_algorithm(char *s1, char *s2) {
+int parallelised_friendly_algorithm(char *s1, char *s2, int NUM_THREADS) {
   unsigned int i, j = 0, x, y, s1len, s2len, u = 0, lmi;
   char *alphabet;
   s1len = strlen(s1);
@@ -237,7 +237,8 @@ int parallelised_friendly_algorithm(char *s1, char *s2) {
   for (i = 0; i < u + 1; i++)
     mi[i] = malloc((s2len + 1) * sizeof(unsigned int));
 
-#pragma omp parallel for private(j) shared(s2len, mi, s2, alphabet)
+#pragma omp parallel for private(j) shared(s2len, mi, s2, alphabet)            \
+    num_threads(NUM_THREADS)
   for (i = 0; i < u; i++) {
     for (j = 0; j < s2len; j++) {
       if (j == 0) {
@@ -252,17 +253,18 @@ int parallelised_friendly_algorithm(char *s1, char *s2) {
   unsigned int **matrix = malloc((s1len + 1) * sizeof(unsigned int *));
   for (i = 0; i < s1len + 1; i++)
     matrix[i] = malloc((s2len + 1) * sizeof(unsigned int));
-#pragma omp parallel for
+#pragma omp parallel for num_threads(NUM_THREADS)
   for (j = 0; j < s2len + 1; j++) {
     matrix[0][j] = j;
   }
-#pragma omp parallel for
+#pragma omp parallel for num_threads(NUM_THREADS)
   for (i = 0; i <= s1len; i++) {
     matrix[i][0] = i;
   }
   for (i = 1; i <= s1len; i++) {
     int a = index_of_letter(s1[i - 1], alphabet);
-#pragma omp parallel for shared(i, s2len, mi) private(lmi)
+#pragma omp parallel for shared(i, s2len, mi) private(lmi)                     \
+    num_threads(NUM_THREADS)
     for (j = 1; j <= s2len; j++) {
       lmi = mi[a][j - 1] + 1;
       if (j == lmi) {
@@ -283,30 +285,33 @@ int parallelised_friendly_algorithm(char *s1, char *s2) {
   return return_val;
 }
 
-void benchmark(char *s1, char *s2, int (*f)(char *, char *)) {
+void benchmark(char *s1, char *s2, int (*f)(char *, char *, int),
+               int num_threads) {
   clock_t start, stop;
   double t = 0.0;
   start = clock();
-  int distance = f(s1, s2);
+  int distance = f(s1, s2, num_threads);
   stop = clock();
   t = (double)(stop - start) / CLOCKS_PER_SEC;
-  printf("Exec time is : %f \n", t);
-  printf("Edit Diagonal Distance is %d \n", distance);
+  // printf("Exec time is : %f \n", t);
+  // printf("Edit Diagonal Distance is %d \n", distance);
+  printf("%f %d \n", t, distance);
 }
 
 int main(int argc, char **argv) {
-  FILE *in = fopen("input.txt", "r");
+  FILE *in = fopen(argv[3], "r");
   int len1 = atoi(argv[1]);
   int len2 = atoi(argv[2]);
+  int num_threads = atoi(argv[4]);
   char s1[len1];
   char s2[len2];
   fscanf(in, "%s %s", s1, s2);
   fclose(in);
-  benchmark(s1, s2, serial_levenshtein);
-  benchmark(s1, s2, diagonal_levenshtein);
-  benchmark(s1, s2, parallel_diagonal_levenshtein);
-  benchmark(s1, s2, parallel_friendly_algorithm);
-  benchmark(s1, s2, parallelised_friendly_algorithm);
+  benchmark(s1, s2, serial_levenshtein, num_threads);
+  benchmark(s1, s2, diagonal_levenshtein, num_threads);
+  benchmark(s1, s2, parallel_diagonal_levenshtein, num_threads);
+  benchmark(s1, s2, parallel_friendly_algorithm, num_threads);
+  benchmark(s1, s2, parallelised_friendly_algorithm, num_threads);
 
   return 0;
 }
