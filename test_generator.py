@@ -15,7 +15,7 @@ test_dimension = [
     (800000, 800000),
 ]
 
-if sys.argv[2] != "onlyrun":
+if len(sys.argv) < 3 or sys.argv[2] != "onlyrun":
     alphabet = "".join(set(sys.argv[1]))
     for (len1, len2) in test_dimension:
         first = [random.choice(alphabet) for _ in range(int(len1))]
@@ -45,10 +45,14 @@ for (len1, len2) in test_dimension:
             ).stdout
         )  # ./ed $1 $2 $3
         print(str(outputs[-1]))
-    with open("test_results.txt", "a") as f:
-        now = datetime.now()
-        f.write(f"-----------------------{now}-----------------------")
-        f.write(f"-----------------------{num_threads}-----------------------")
+        with open("test_results.txt", "a") as f:
+            now = datetime.now()
+            f.write("\n")
+            f.write(f"-----------------------{now}----------------------- \n")
+            f.write(
+                f"-----------------------{num_threads} {len1} {len2} ----------------------- \n"
+            )
 
-        f.writelines(outputs)
-        f.write(f"\\-----------------------{now}-----------------------\\")
+            f.writelines(outputs)
+            f.write(f"\\-----------------------{now}-----------------------\\")
+            f.write("\n")
